@@ -131,7 +131,7 @@ class SimpleRAG:
 
         return embeddings, metadata
 
-    def load_to_neo4j(self, embeddings, metadata):
+    def load_to_neo4j(self, embeddings, metadata, clear_db=False):
         """Load embeddings and metadata into Neo4j"""
         vector_dimension = len(embeddings[0])
 
@@ -140,15 +140,17 @@ class SimpleRAG:
         )
 
         with driver.session() as session:
-            # Clear existing data
-            session.run("MATCH (n) DETACH DELETE n")
-            print("Database cleared.")
+            # Clear existing data and drop indexes only if clear_db flag is True
+            if clear_db:
+                # Clear existing data
+                session.run("MATCH (n) DETACH DELETE n")
+                print("Database cleared.")
 
-            # Drop existing indexes
-            session.run("DROP INDEX vector_index IF EXISTS")
-            print("Existing indexes dropped.")
+                # Drop existing indexes
+                session.run("DROP INDEX vector_index IF EXISTS")
+                print("Existing indexes dropped.")
 
-            # Create vector index
+            # Create vector index if it doesn't exist
             index_query = f"""
             CREATE VECTOR INDEX vector_index IF NOT EXISTS FOR (v:Vector)
             ON (v.vector)
@@ -160,7 +162,7 @@ class SimpleRAG:
             }}
             """
             session.run(index_query)
-            print("Vector index created.")
+            print("Vector index created or verified.")
 
             # Insert vector nodes
             for vector_id, (vector, meta) in tqdm(
@@ -195,7 +197,7 @@ class SimpleRAG:
         driver.close()
         print("Data successfully inserted into Neo4j.")
 
-    def run_ingestion_pipeline(self, html_dir):
+    def run_ingestion_pipeline(self, html_dir, clear_db=False):
         """Run the complete ingestion pipeline"""
         print(f"Extracting HTML from {html_dir}...")
         docs = self.extract_html(html_dir)
@@ -209,7 +211,7 @@ class SimpleRAG:
         embeddings, metadata = self.embed_chunks(chunks)
 
         print("Loading data to Neo4j...")
-        self.load_to_neo4j(embeddings, metadata)
+        self.load_to_neo4j(embeddings, metadata, clear_db)
 
         print("Ingestion pipeline completed successfully.")
 
@@ -273,6 +275,11 @@ def parse_args():
         "--html_dir", type=str, help="Directory containing HTML files (for ingest mode)"
     )
     parser.add_argument("--query", type=str, help="Query to answer (for query mode)")
+    parser.add_argument(
+        "--clear_db",
+        action="store_true",
+        help="Clear database and drop indexes before ingestion",
+    )
     return parser.parse_args()
 
 
@@ -286,7 +293,7 @@ def main():
             print("Error: --html_dir is required for ingest mode")
             return
 
-        rag.run_ingestion_pipeline(args.html_dir)
+        rag.run_ingestion_pipeline(args.html_dir, args.clear_db)
 
     elif args.mode == "query":
         if not args.query:
