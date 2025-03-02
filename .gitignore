@@ -1,0 +1,9 @@
+# repo
+.env
+data
+
+# osx
+.DS_Store
+
+# Python
+__pycache__

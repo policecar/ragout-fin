@@ -1,0 +1,12 @@
+bs4==0.0.2
+langchain==0.3.19
+langchain-anthropic==0.3.8
+langchain-community==0.3.18
+langchain-huggingface==0.1.2
+langchain_openai==0.3.7
+neo4j==5.28.1
+pre-commit==4.1.0
+python-dotenv==1.0.1
+pyyaml==6.0.2
+ruff==0.9.9
+sentence-transformers==3.4.1
