@@ -58,30 +58,44 @@ class SimpleRAG:
     def extract_html(self, directory_path):
         """Extract text from HTML files in a directory"""
         documents = []
+
+        # Check if directory exists
+        if not os.path.exists(directory_path):
+            print(f"Error: Directory '{directory_path}' does not exist")
+            return documents
+
         for root, _, files in os.walk(directory_path):
             for file in files:
                 if file.endswith(".html"):
                     file_path = os.path.join(root, file)
-                    with open(file_path, "r", encoding="utf-8") as f:
-                        html_content = f.read()
+                    try:
+                        with open(file_path, "r", encoding="utf-8") as f:
+                            html_content = f.read()
 
-                    soup = BeautifulSoup(html_content, "html.parser")
+                        soup = BeautifulSoup(html_content, "html.parser")
 
-                    # Remove script and style elements that won't contribute to content
-                    for script in soup(["script", "style"]):
-                        script.extract()
+                        # Remove script and style elements that won't contribute to content
+                        for script in soup(["script", "style"]):
+                            script.extract()
 
-                    # Extract title for metadata
-                    title = (
-                        soup.title.string if soup.title else os.path.basename(file_path)
-                    )
+                        # Extract title for metadata
+                        title = (
+                            soup.title.string
+                            if soup.title
+                            else os.path.basename(file_path)
+                        )
 
-                    # Get the page text while maintaining some structure
-                    text = soup.get_text(separator="\n", strip=True)
+                        # Get the page text while maintaining some structure
+                        text = soup.get_text(separator="\n", strip=True)
 
-                    documents.append(
-                        {"file_name": file_path, "title": title, "text": text}
-                    )
+                        documents.append(
+                            {"file_name": file_path, "title": title, "text": text}
+                        )
+                    except Exception as e:
+                        print(f"Error processing file {file_path}: {e}")
+
+        if not documents:
+            print(f"Warning: No HTML files found in '{directory_path}'")
 
         return documents
 
@@ -201,19 +215,34 @@ class SimpleRAG:
         """Run the complete ingestion pipeline"""
         print(f"Extracting HTML from {html_dir}...")
         docs = self.extract_html(html_dir)
+
+        if not docs:
+            print("Error: No documents to process. Ingestion pipeline aborted.")
+            return False
+
         print(f"Extracted {len(docs)} documents")
 
         print("Chunking documents...")
         chunks = self.chunk_documents(docs)
+
+        if not chunks:
+            print("Error: No chunks created. Ingestion pipeline aborted.")
+            return False
+
         print(f"Created {len(chunks)} chunks")
 
         print("Generating embeddings...")
         embeddings, metadata = self.embed_chunks(chunks)
 
+        if not embeddings or len(embeddings) == 0:
+            print("Error: No embeddings generated. Ingestion pipeline aborted.")
+            return False
+
         print("Loading data to Neo4j...")
         self.load_to_neo4j(embeddings, metadata, clear_db)
 
         print("Ingestion pipeline completed successfully.")
+        return True
 
     def setup_qa(self):
         """Initialize the QA system"""
@@ -284,6 +313,7 @@ def parse_args():
 
 
 def main():
+
     args = parse_args()
 
     rag = SimpleRAG(args.config)
@@ -293,7 +323,9 @@ def main():
             print("Error: --html_dir is required for ingest mode")
             return
 
-        rag.run_ingestion_pipeline(args.html_dir, args.clear_db)
+        success = rag.run_ingestion_pipeline(args.html_dir, args.clear_db)
+        if not success:
+            print("Ingestion pipeline failed. Please check the logs for details.")
 
     elif args.mode == "query":
         if not args.query:
